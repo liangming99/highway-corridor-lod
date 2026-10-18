@@ -4,6 +4,7 @@ import { COPY } from './copy.js';
 import { buildCorridor } from './geo.js';
 import { TileManager } from './tilemanager.js';
 import { Hud, Bench } from './hud.js';
+import { AssetPanel } from './assetpanel.js';
 import { frameStats } from './hud.js';
 
 window.addEventListener('error', (e) => {
@@ -399,6 +400,20 @@ async function boot() {
   resize();
   state.edgesGroup = new THREE.Group();
   state.scene.add(state.edgesGroup);
+  state.assetPanel = new AssetPanel({
+    scene: state.scene,
+    camera: state.camera,
+    canvas: state.renderer.domElement,
+    corridor: state.corridor,
+    tiles: state.tiles,
+    state,
+    onLocate: (asset) => {
+      state.dist = asset.dist;
+      const p = state.corridor.sampleAt(asset.dist);
+      state.altitude = Math.max(260, Math.min(700, state.altitude));
+    },
+  });
+  state.assetPanel.onToast = toast;
 
   let last = performance.now();
   let lastEdges = 0;
@@ -447,6 +462,7 @@ async function boot() {
       state.renderer,
       now
     );
+    if (state.assetPanel) state.assetPanel.followSelection();
     const st = state.tiles.getStats();
     document.getElementById('hKm').textContent = COPY.fmt.km(state.dist / 1000);
     document.getElementById('hSpeed').textContent = COPY.fmt.speed(state.bench.running ? state.bench.ctxSpeedKmh : state.speedKmh);

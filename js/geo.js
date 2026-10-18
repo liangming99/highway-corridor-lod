@@ -124,5 +124,8 @@ export function buildCorridor(raw) {
     toLocal(lon, lat) {
       return { x: (lon - origin.lon) * mPerDegLon, z: -(lat - origin.lat) * mPerDegLat };
     },
+    toLonLat(x, z) {
+      return { lon: origin.lon + x / mPerDegLon, lat: origin.lat - z / mPerDegLat };
+    },
   };
 }

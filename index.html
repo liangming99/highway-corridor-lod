@@ -150,6 +150,69 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
+<!-- ══════════ 结构物与工单面板 ══════════ -->
+<aside class="assets" id="assetPanel">
+  <div class="assets-head">
+    <h2 data-copy="asset.panelTitle"></h2>
+    <button class="icon" id="assetCollapse" data-copy-title="asset.listTitle">−</button>
+  </div>
+
+  <div class="assets-body" id="assetBody">
+    <section class="assets-list-wrap">
+      <div class="sub-head">
+        <b data-copy="asset.listTitle"></b>
+        <s data-copy="asset.nearHint"></s>
+      </div>
+      <ul id="assetList" class="asset-list"></ul>
+    </section>
+
+    <section class="asset-detail" id="assetDetail">
+      <div class="empty" id="assetEmpty" data-copy="asset.empty"></div>
+
+      <div class="detail-body" id="detailBody" hidden>
+        <div class="detail-title">
+          <b id="dName">—</b>
+          <span class="badge" id="dType">—</span>
+          <span class="health" id="dHealth">—</span>
+        </div>
+        <dl class="kv" id="dFields"></dl>
+
+        <div class="sub-head">
+          <b data-copy="asset.metricsTitle"></b>
+          <s data-copy="asset.metricsHint"></s>
+        </div>
+        <div class="metrics" id="dMetrics"></div>
+
+        <div class="sub-head">
+          <b data-copy="asset.wo.title"></b>
+          <button class="btn small" id="woOpen" data-copy="asset.wo.create"></button>
+        </div>
+
+        <form class="wo-form" id="woForm" hidden>
+          <label class="ctl">
+            <span><s data-copy="asset.wo.category"></s></span>
+            <select id="woCategory"></select>
+          </label>
+          <label class="ctl">
+            <span><s data-copy="asset.wo.priority"></s></span>
+            <select id="woPriority"></select>
+          </label>
+          <label class="ctl">
+            <span><s data-copy="asset.wo.note"></s></span>
+            <textarea id="woNote" rows="3"></textarea>
+          </label>
+          <div class="row">
+            <button class="btn primary" type="submit" data-copy="asset.wo.submit"></button>
+            <button class="btn" type="button" id="woCancel" data-copy="asset.wo.cancel"></button>
+          </div>
+        </form>
+
+        <ul class="wo-list" id="woList"></ul>
+      </div>
+    </section>
+  </div>
+</aside>
+
 <div class="boot-notice" id="bootNotice" hidden></div>
 <script src="js/fallback.js"></script>
 <script type="module" src="js/main.js"></script>
