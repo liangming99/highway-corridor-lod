@@ -1,0 +1,315 @@
+{
+ "stage": "done",
+ "meta": {
+  "corridor": "G72 泉南高速 · 桂林—鹿寨段",
+  "length": "100.2 km",
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+  "viewport": {
+   "w": 1454,
+   "h": 863,
+   "dpr": 1.100000023841858
+  }
+ },
+ "out": [
+  {
+   "name": "A 巡航 60 km/h",
+   "durationSec": 30,
+   "distanceKm": 0.52,
+   "frames": 822,
+   "avgFps": 29,
+   "frameMs": {
+    "p50": 33.3,
+    "p95": 34.4,
+    "max": 200
+   },
+   "low1Fps": 9.6,
+   "built": 304,
+   "evictions": 13,
+   "staleDrops": 0,
+   "demFail": 0,
+   "imgFail": 0,
+   "downloadedMB": 22,
+   "memoryMB": 48.8,
+   "resident": 139,
+   "viewport": {
+    "width": 1455,
+    "height": 864,
+    "dpr": 1.100000023841858
+   },
+   "settings": {
+    "speedKmh": 240,
+    "altitude": 420,
+    "lodBias": 0,
+    "bufferKm": 2.5,
+    "concurrency": 6,
+    "maxBuilds": 3,
+    "texBudgetMB": 384,
+    "imgCap": 16,
+    "imagery": true
+   },
+   "envRafFps": 30,
+   "mainThreadMs": 5.19,
+   "mainThreadP95Ms": 7.52,
+   "warmupMaxMs": 66.7,
+   "baseline": {
+    "p50": 33.4,
+    "p95": 34.3,
+    "fps": 29.7,
+    "frames": 90
+   },
+   "limitedByEnvironment": true,
+   "verdict": "pass"
+  },
+  {
+   "name": "B 流式 3600 km/h",
+   "durationSec": 45.1,
+   "distanceKm": 47.18,
+   "frames": 1243,
+   "avgFps": 28.1,
+   "frameMs": {
+    "p50": 33.3,
+    "p95": 50,
+    "max": 200
+   },
+   "low1Fps": 7.3,
+   "built": 2081,
+   "evictions": 878,
+   "staleDrops": 3,
+   "demFail": 0,
+   "imgFail": 0,
+   "downloadedMB": 172.9,
+   "memoryMB": 65.4,
+   "resident": 184,
+   "viewport": {
+    "width": 1455,
+    "height": 864,
+    "dpr": 1.100000023841858
+   },
+   "settings": {
+    "speedKmh": 240,
+    "altitude": 420,
+    "lodBias": 0,
+    "bufferKm": 2.5,
+    "concurrency": 6,
+    "maxBuilds": 3,
+    "texBudgetMB": 384,
+    "imgCap": 16,
+    "imagery": true
+   },
+   "envRafFps": 30,
+   "mainThreadMs": 6.68,
+   "mainThreadP95Ms": 12.12,
+   "warmupMaxMs": 49.2,
+   "baseline": {
+    "p50": 33.3,
+    "p95": 34.4,
+    "fps": 29.5,
+    "frames": 90
+   },
+   "limitedByEnvironment": true,
+   "verdict": "pass"
+  },
+  {
+   "name": "C 跳转 5 km / 2 s",
+   "durationSec": 40,
+   "distanceKm": 85,
+   "frames": 665,
+   "avgFps": 33.6,
+   "frameMs": {
+    "p50": 17.3,
+    "p95": 50.2,
+    "max": 200
+   },
+   "low1Fps": 5,
+   "built": 672,
+   "evictions": 329,
+   "staleDrops": 44,
+   "demFail": 0,
+   "imgFail": 0,
+   "downloadedMB": 66.6,
+   "memoryMB": 8.3,
+   "resident": 22,
+   "viewport": {
+    "width": 1455,
+    "height": 864,
+    "dpr": 1.100000023841858
+   },
+   "settings": {
+    "speedKmh": 240,
+    "altitude": 420,
+    "lodBias": 0,
+    "bufferKm": 2.5,
+    "concurrency": 6,
+    "maxBuilds": 3,
+    "texBudgetMB": 384,
+    "imgCap": 16,
+    "imagery": true
+   },
+   "envRafFps": 30,
+   "mainThreadMs": 8.5,
+   "mainThreadP95Ms": 16.69,
+   "warmupMaxMs": 200,
+   "baseline": {
+    "p50": 33.3,
+    "p95": 34.1,
+    "fps": 24.2,
+    "frames": 42
+   },
+   "limitedByEnvironment": true,
+   "verdict": "warn"
+  }
+ ],
+ "shot": "/Users/ming/Documents/Codex/2026-10-17/https-x-com-claudeai-status-2111177834127601902/work/lod-dev/final2-shot.png",
+ "json": {
+  "generatedAt": "2026-10-17T15:41:43.362Z",
+  "results": [
+   {
+    "name": "A 巡航 60 km/h",
+    "durationSec": 30,
+    "distanceKm": 0.52,
+    "frames": 822,
+    "avgFps": 29,
+    "frameMs": {
+     "p50": 33.3,
+     "p95": 34.4,
+     "max": 200
+    },
+    "low1Fps": 9.6,
+    "built": 304,
+    "evictions": 13,
+    "staleDrops": 0,
+    "demFail": 0,
+    "imgFail": 0,
+    "downloadedMB": 22,
+    "memoryMB": 48.8,
+    "resident": 139,
+    "viewport": {
+     "width": 1455,
+     "height": 864,
+     "dpr": 1.100000023841858
+    },
+    "settings": {
+     "speedKmh": 240,
+     "altitude": 420,
+     "lodBias": 0,
+     "bufferKm": 2.5,
+     "concurrency": 6,
+     "maxBuilds": 3,
+     "texBudgetMB": 384,
+     "imgCap": 16,
+     "imagery": true
+    },
+    "envRafFps": 30,
+    "mainThreadMs": 5.19,
+    "mainThreadP95Ms": 7.52,
+    "warmupMaxMs": 66.7,
+    "baseline": {
+     "p50": 33.4,
+     "p95": 34.3,
+     "fps": 29.7,
+     "frames": 90
+    },
+    "limitedByEnvironment": true,
+    "verdict": "pass"
+   },
+   {
+    "name": "B 流式 3600 km/h",
+    "durationSec": 45.1,
+    "distanceKm": 47.18,
+    "frames": 1243,
+    "avgFps": 28.1,
+    "frameMs": {
+     "p50": 33.3,
+     "p95": 50,
+     "max": 200
+    },
+    "low1Fps": 7.3,
+    "built": 2081,
+    "evictions": 878,
+    "staleDrops": 3,
+    "demFail": 0,
+    "imgFail": 0,
+    "downloadedMB": 172.9,
+    "memoryMB": 65.4,
+    "resident": 184,
+    "viewport": {
+     "width": 1455,
+     "height": 864,
+     "dpr": 1.100000023841858
+    },
+    "settings": {
+     "speedKmh": 240,
+     "altitude": 420,
+     "lodBias": 0,
+     "bufferKm": 2.5,
+     "concurrency": 6,
+     "maxBuilds": 3,
+     "texBudgetMB": 384,
+     "imgCap": 16,
+     "imagery": true
+    },
+    "envRafFps": 30,
+    "mainThreadMs": 6.68,
+    "mainThreadP95Ms": 12.12,
+    "warmupMaxMs": 49.2,
+    "baseline": {
+     "p50": 33.3,
+     "p95": 34.4,
+     "fps": 29.5,
+     "frames": 90
+    },
+    "limitedByEnvironment": true,
+    "verdict": "pass"
+   },
+   {
+    "name": "C 跳转 5 km / 2 s",
+    "durationSec": 40,
+    "distanceKm": 85,
+    "frames": 665,
+    "avgFps": 33.6,
+    "frameMs": {
+     "p50": 17.3,
+     "p95": 50.2,
+     "max": 200
+    },
+    "low1Fps": 5,
+    "built": 672,
+    "evictions": 329,
+    "staleDrops": 44,
+    "demFail": 0,
+    "imgFail": 0,
+    "downloadedMB": 66.6,
+    "memoryMB": 8.3,
+    "resident": 22,
+    "viewport": {
+     "width": 1455,
+     "height": 864,
+     "dpr": 1.100000023841858
+    },
+    "settings": {
+     "speedKmh": 240,
+     "altitude": 420,
+     "lodBias": 0,
+     "bufferKm": 2.5,
+     "concurrency": 6,
+     "maxBuilds": 3,
+     "texBudgetMB": 384,
+     "imgCap": 16,
+     "imagery": true
+    },
+    "envRafFps": 30,
+    "mainThreadMs": 8.5,
+    "mainThreadP95Ms": 16.69,
+    "warmupMaxMs": 200,
+    "baseline": {
+     "p50": 33.3,
+     "p95": 34.1,
+     "fps": 24.2,
+     "frames": 42
+    },
+    "limitedByEnvironment": true,
+    "verdict": "warn"
+   }
+  ]
+ }
+}

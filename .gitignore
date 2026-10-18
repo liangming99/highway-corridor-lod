@@ -1,0 +1,13 @@
+# 依赖与缓存
+node_modules/
+
+# 本地缓存与临时产物
+.playwright-cli/
+*.log
+.DS_Store
+
+# 本地高程缓存（运行时在线拉取，不入库）
+data/dem/
+
+# 开发用的占位走廊
+data/corridor.dev.json

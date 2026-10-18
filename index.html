@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title></title>
+<link rel="stylesheet" href="styles.css" />
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark"></span>
+    <span class="name" data-copy="app.title"></span>
+    <span class="sub" data-copy="app.subtitle"></span>
+  </div>
+  <div class="chips">
+    <span class="chip"><i data-copy="incident.progress"></i><b id="hKm">—</b></span>
+    <span class="chip"><i data-copy="incident.speed"></i><b id="hSpeed">—</b></span>
+    <span class="chip"><i data-copy="incident.altitude"></i><b id="hAlt">—</b></span>
+    <span class="chip"><i data-copy="incident.heading"></i><b id="hHeading">—</b></span>
+    <span class="chip wide"><i data-copy="incident.corridor"></i><b id="corridorName">—</b><s data-copy="incident.length"></s><b id="corridorLen">—</b></span>
+  </div>
+</header>
+
+<aside class="panel">
+  <div class="group">
+    <h3 data-copy="panel.groups.drive"></h3>
+    <label class="ctl" data-copy-title="panel.speed">
+      <span><s data-copy="panel.speed"></s><b id="valSpeed">—</b></span>
+      <input id="speed" type="range" min="30" max="720" step="30" value="240" />
+    </label>
+    <label class="ctl" data-copy-title="panel.altitude">
+      <span><s data-copy="panel.altitude"></s><b id="valAlt">—</b></span>
+      <input id="altitude" type="range" min="120" max="1600" step="20" value="420" />
+    </label>
+    <div class="row">
+      <select id="modeSelect" data-copy-aria="incident.mode">
+        <option value="follow" data-copy="incident.modeFollow"></option>
+        <option value="free" data-copy="incident.modeFree"></option>
+      </select>
+      <button id="btnPlay" class="btn" data-copy="panel.play"></button>
+    </div>
+    <div class="row">
+      <input id="jumpTo" type="number" min="0" step="1" placeholder="0" data-copy-aria="panel.jumpTo" />
+      <button id="btnJump" class="btn" data-copy="panel.jump"></button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h3 data-copy="panel.groups.lod"></h3>
+    <label class="ctl" data-copy-title="panel.lodBias">
+      <span><s data-copy="panel.lodBias"></s><b id="valBias">0</b></span>
+      <input id="bias" type="range" min="-2" max="2" step="1" value="0" />
+    </label>
+    <label class="ctl" data-copy-title="panel.buffer">
+      <span><s data-copy="panel.buffer"></s><b id="valBuffer">—</b></span>
+      <input id="buffer" type="range" min="1" max="6" step="0.5" value="2.5" />
+    </label>
+    <label class="ctl" data-copy-title="panel.concurrency">
+      <span><s data-copy="panel.concurrency"></s><b id="valConc">6</b></span>
+      <input id="concurrency" type="range" min="1" max="12" step="1" value="6" />
+    </label>
+    <label class="ctl" data-copy-title="panel.maxBuilds">
+      <span><s data-copy="panel.maxBuilds"></s><b id="valBuilds">3</b></span>
+      <input id="builds" type="range" min="1" max="8" step="1" value="3" />
+    </label>
+    <label class="ctl" data-copy-title="panel.texBudget">
+      <span><s data-copy="panel.texBudget"></s><b id="valTex">—</b></span>
+      <input id="texBudget" type="range" min="64" max="1024" step="32" value="384" />
+    </label>
+    <label class="ctl">
+      <span><s data-copy="panel.imgCap"></s></span>
+      <select id="imgCap">
+        <option value="14">z14</option>
+        <option value="15">z15</option>
+        <option value="16" selected>z16</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="group">
+    <h3 data-copy="panel.groups.layers"></h3>
+    <label class="chk"><input id="imgOn" type="checkbox" checked /><s data-copy="panel.imgOn"></s></label>
+    <label class="chk"><input id="reliefOn" type="checkbox" checked /><s data-copy="panel.reliefOn"></s></label>
+    <label class="chk"><input id="skirtOn" type="checkbox" checked /><s data-copy="panel.skirtOn"></s></label>
+    <label class="chk"><input id="tileEdges" type="checkbox" /><s data-copy="panel.tileEdges"></s></label>
+    <label class="chk"><input id="wireframe" type="checkbox" /><s data-copy="panel.wireframe"></s></label>
+    <label class="chk"><input id="minimapOn" type="checkbox" checked /><s data-copy="panel.minimapOn"></s></label>
+    <label class="chk"><input id="hudOn" type="checkbox" checked /><s data-copy="panel.hudOn"></s></label>
+    <label class="chk"><input id="dprLock" type="checkbox" /><s data-copy="panel.dprLock"></s></label>
+    <label class="chk"><input id="baseline" type="checkbox" /><s data-copy="panel.baseline"></s></label>
+    <label class="chk"><input id="batchMode" type="checkbox" checked /><s data-copy="panel.batchMode"></s></label>
+  </div>
+
+  <div class="group">
+    <h3 data-copy="panel.groups.bench"></h3>
+    <button id="benchA" class="btn wide" data-copy="panel.benchStartA"></button>
+    <button id="benchB" class="btn wide" data-copy="panel.benchStartB"></button>
+    <button id="benchC" class="btn wide" data-copy="panel.benchStartC"></button>
+    <div class="row">
+      <button id="benchStop" class="btn" data-copy="panel.benchStop"></button>
+      <button id="benchCopy" class="btn" data-copy="panel.benchCopy"></button>
+    </div>
+    <p class="hint" data-copy="panel.benchHint"></p>
+  </div>
+</aside>
+
+<div class="hud" id="hud">
+  <div class="hud-title" data-copy="hud.title"></div>
+  <div class="metrics">
+    <div class="m"><s data-copy="hud.fps"></s><b id="mFps">—</b></div>
+    <div class="m"><s data-copy="hud.frameP50"></s><b id="mP50">—</b></div>
+    <div class="m"><s data-copy="hud.frameP95"></s><b id="mP95">—</b></div>
+    <div class="m"><s data-copy="hud.low1"></s><b id="mLow1">—</b></div>
+    <div class="m"><s data-copy="hud.drawCalls"></s><b id="mDraw">—</b></div>
+    <div class="m"><s data-copy="hud.triangles"></s><b id="mTris">—</b></div>
+    <div class="m"><s data-copy="hud.resident"></s><b id="mResident">—</b></div>
+    <div class="m"><s data-copy="hud.queue"></s><b id="mQueue">—</b></div>
+    <div class="m"><s data-copy="hud.texMB"></s><b id="mTexMB">—</b></div>
+    <div class="m"><s data-copy="hud.netMB"></s><b id="mNet">—</b></div>
+    <div class="m"><s data-copy="hud.evictions"></s><b id="mEvict">—</b></div>
+    <div class="m"><s data-copy="hud.staleDrops"></s><b id="mStale">—</b></div>
+    <div class="m"><s data-copy="hud.built"></s><b id="mBuilt">—</b></div>
+    <div class="m"><s data-copy="hud.demTiles"></s><b id="mDemTiles">—</b></div>
+    <div class="m"><s data-copy="hud.stageTiles"></s><b id="mStageTiles">—</b></div>
+    <div class="m"><s data-copy="hud.stageRender"></s><b id="mStageRender">—</b></div>
+    <div class="m"><s data-copy="hud.envCap"></s><b id="mEnvCap">—</b></div>
+    <div class="m"><s data-copy="hud.mainMs"></s><b id="mMainMs">—</b></div>
+    <div class="m"><s data-copy="hud.mode"></s><b id="mMode">—</b></div>
+    <div class="m"><s data-copy="hud.km"></s><b id="mDist">—</b></div>
+    <div class="m wide"><s data-copy="hud.levels"></s><b id="mLevels">—</b></div>
+  </div>
+  <canvas id="frameGraph"></canvas>
+</div>
+
+<div class="minimap-wrap" id="minimapWrap">
+  <div class="mm-title" data-copy="minimap.title"></div>
+  <canvas id="minimap"></canvas>
+  <div class="mm-note" data-copy="minimap.legend"></div>
+</div>
+
+<div class="bench-card" id="benchCard" hidden>
+  <div class="bench-head"><b data-copy="bench.done"></b><button id="benchCopy2" class="btn" hidden></button></div>
+  <div id="benchRows"></div>
+  <div class="verdict" id="benchVerdict"></div>
+  <div class="note" data-copy="bench.note"></div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<div class="boot-notice" id="bootNotice" hidden></div>
+<script src="js/fallback.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
