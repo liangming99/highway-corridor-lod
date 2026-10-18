@@ -10,6 +10,19 @@ import { frameStats } from './hud.js';
 window.addEventListener('error', (e) => {
   (window.__errs = window.__errs || []).push(String((e && e.message) || e));
 });
+// 长任务监测：漫游卡顿时可查到主线程被什么拖住
+window.__longTasks = [];
+try {
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      window.__longTasks.push({
+        d: Math.round(e.duration),
+        at: Math.round(e.startTime),
+        attribution: (e.attribution || []).map((a) => ({ name: a.name, type: a.entryType, container: a.containerType, src: a.containerSrc })),
+      });
+    }
+  }).observe({ entryTypes: ['longtask'] });
+} catch (e) { /* 浏览器不支持则不采集 */ }
 window.addEventListener('unhandledrejection', (e) => {
   (window.__errs = window.__errs || []).push('rejection: ' + String((e && e.reason && e.reason.message) || (e && e.reason)));
 });
@@ -381,6 +394,7 @@ async function boot() {
     scene: state.scene,
     corridor: state.corridor,
     renderer: state.renderer,
+    onReady: () => {},
     onEvent: (type) => {
       if (type === 'imgFail') toast(COPY.toast.imgFail);
       if (type === 'demFail') toast(COPY.toast.demFail);
@@ -430,10 +444,24 @@ async function boot() {
     state.rafId = requestAnimationFrame(loop);
     const dtMs = Math.min(200, now - last);
     last = now;
+    // 慢帧归因：记录每段的耗时，便于定位卡顿来源
+    if (dtMs > 300) {
+      (window.__slowFrames = window.__slowFrames || []).push({
+        at: Math.round(now), dt: Math.round(dtMs),
+        tiles: +(state.profile?.tiles || 0).toFixed(1),
+        render: +(state.profile?.render || 0).toFixed(1),
+        res: state.tiles ? state.tiles.getStats().resident : -1,
+        queue: state.tiles ? state.tiles.getStats().queue : -1,
+        heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : -1,
+      });
+      if (window.__slowFrames.length > 40) window.__slowFrames.shift();
+    }
     const dt = dtMs / 1000;
     const t0 = performance.now();
     updateCamera(dt);
-    state.tiles.update({ x: state.camera.position.x, z: state.camera.position.z, dist: state.dist });
+    if (!document.hidden) {
+      state.tiles.update({ x: state.camera.position.x, z: state.camera.position.z, dist: state.dist });
+    }
     const t1 = performance.now();
     state.hud.frame(dtMs);
     state.bench.tick(now, dtMs, benchCtx());
@@ -519,4 +547,46 @@ window.__lod = {
       };
       requestAnimationFrame(step);
     }),
+  /** E2E 采样：状态 + 堆 + 长任务 */
+  sample: () => {
+    const st = state.tiles ? state.tiles.getStats() : null;
+    const mem = performance.memory;
+    return {
+      t: Math.round(performance.now()),
+      dist: Math.round(state.dist),
+      resident: st ? st.resident : -1,
+      desired: st ? st.desired : -1,
+      queue: st ? st.queue : -1,
+      inflight: st ? st.inflight : -1,
+      built: st ? st.built : -1,
+      evictions: st ? st.evictions : -1,
+      stale: st ? st.staleDrops : -1,
+      slotsFree: state.tiles && state.tiles.atlas ? state.tiles.atlas.free.length : -1,
+      atlasSlotsFree: state.tiles && state.tiles.atlases
+        ? [...state.tiles.atlases.values()].reduce((s, a) => s + a.free.length, 0)
+        : -1,
+      slotsAcquired: st ? st.slotsAcquired : -1,
+      slotsReleased: st ? st.slotsReleased : -1,
+      ready: st ? st.ready : -1,
+      readyDrops: st ? st.readyDrops : -1,
+      assetMeshes: (() => {
+        let n = 0;
+        state.scene.traverse((o) => { if (o.isMesh && o.userData && o.userData.assetId) n++; });
+        return n;
+      })(),
+      memMB: st ? +st.memMB.toFixed(1) : -1,
+      draws: state.renderer.info.render.calls,
+      tris: state.renderer.info.render.triangles,
+      heapMB: mem ? +(mem.usedJSHeapSize / 1048576).toFixed(1) : -1,
+      heapLimitMB: mem ? +(mem.jsHeapSizeLimit / 1048576).toFixed(1) : -1,
+      atlasUploads: st ? st.atlasUploads : -1,
+      longTasks: (window.__longTasks || []).length,
+      longestTask: (window.__longTasks || []).reduce((m, x) => Math.max(m, x.d), 0),
+      slowFrames: (window.__slowFrames || []).slice(-6),
+      uploadMsByLevel: st ? st.uploadMsByLevel : {},
+      atlasSize: st ? st.atlasSize : {},
+      maxUploadMs: st ? st.maxUploadMs : -1,
+      errs: (window.__errs || []).length,
+    };
+  },
 };

@@ -1,17 +1,19 @@
-// atlas.js — 共享图集：一张画布纹理承载所有层级的瓦片影像
-// 使用 Canvas 上传路径（Three 自己管理 GL 状态），上传按时间限流，避免卡顿。
+// atlas.js — 每层一张小图集：槽位拼图 + 分帧限流上传
+// 单张图集越小，整张上传的长任务越短；每帧最多上传一张。
 import * as THREE from 'three';
 
 const SLOT_PX = 256;
 const GUTTER = 4;
 const PITCH = SLOT_PX + GUTTER;
 
-export class SharedAtlas {
-  constructor({ renderer, cols = 8 }) {
+export class LevelAtlas {
+  constructor({ renderer, slots, tier }) {
     this.renderer = renderer;
+    this.tier = tier;
+    const cols = Math.max(1, Math.ceil(Math.sqrt(slots)));
     this.cols = cols;
     this.rows = cols;
-    this.slots = cols * cols;
+    this.slots = slots;
     this.width = cols * PITCH;
     this.height = cols * PITCH;
 
@@ -30,32 +32,26 @@ export class SharedAtlas {
     tex.generateMipmaps = true;
     tex.wrapS = THREE.ClampToEdgeWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
-    renderer.initTexture(tex);
+    try { renderer.initTexture(tex); } catch (e) { /* 已初始化 */ }
     this.texture = tex;
 
     this.free = [];
-    for (let i = this.slots - 1; i >= 0; i--) this.free.push(i);
-    this.ownerOf = new Array(this.slots).fill(null);
+    for (let i = slots - 1; i >= 0; i--) this.free.push(i);
     this.dirty = false;
-    this.lastUpload = 0;
     this.uploadCount = 0;
+    this.lastUpload = 0;
   }
 
   get capacity() {
     return this.slots;
   }
 
-  acquire(owner) {
-    if (!this.free.length) return -1;
-    const slot = this.free.pop();
-    this.ownerOf[slot] = owner || null;
-    return slot;
+  acquire() {
+    return this.free.length ? this.free.pop() : -1;
   }
 
   release(slot) {
-    if (slot < 0 || slot >= this.slots) return;
-    this.ownerOf[slot] = null;
-    this.free.push(slot);
+    if (slot >= 0 && slot < this.slots) this.free.push(slot);
   }
 
   uvRect(slot) {
@@ -73,7 +69,6 @@ export class SharedAtlas {
     };
   }
 
-  /** 把瓦片影像画进槽位；不立即上传，等 flush() */
   writeTile(slot, bitmap) {
     if (slot < 0 || slot >= this.slots) return false;
     const r = this.uvRect(slot);
@@ -87,8 +82,8 @@ export class SharedAtlas {
     return true;
   }
 
-  /** 限流上传：默认最短 250 ms 一次，避免每帧重传整张图集 */
-  flush(now, minIntervalMs = 250) {
+  /** 由调度器按帧调用；单张图集最少间隔 minIntervalMs */
+  flush(now, minIntervalMs = 180) {
     if (!this.dirty) return false;
     if (now - this.lastUpload < minIntervalMs) return false;
     this.texture.needsUpdate = true;

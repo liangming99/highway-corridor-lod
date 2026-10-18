@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { COPY } from './copy.js';
 import { ASSET_TYPES, buildAsset, makeAssetList } from './assets.js';
+import { mergeGroupByColor } from './merge.js';
 import {
   sampleTelemetry, gradeMetric, assetHealth,
   loadWorkOrders, saveWorkOrders, createWorkOrder, advanceWorkOrder,
@@ -41,35 +42,63 @@ export class AssetPanel {
   }
 
   _buildModels() {
+    const markerGeoms = [];
+    const markerColors = [];
     for (const asset of this.assets) {
       const model = buildAsset(asset);
       const ground = this._safeGround(asset.x, asset.z);
       const baseY = ground != null ? ground : asset.ele;
       model.position.set(asset.x, baseY + 1.5, asset.z);
       model.userData.assetId = asset.id;
-      model.traverse((o) => {
-        if (o.isMesh) {
-          o.userData.assetId = asset.id;
-          this.pickTargets.push(o);
-        }
-      });
-      this.group.add(model);
-      this.meshById.set(asset.id, model);
+      // 合并为单网格：一个结构物只占 1 次绘制
+      const merged = mergeGroupByColor(model);
+      const mesh = new THREE.Mesh(merged, new THREE.MeshLambertMaterial({ vertexColors: true }));
+      mesh.userData.assetId = asset.id;
+      mesh.name = asset.id;
+      this.group.add(mesh);
+      this.pickTargets.push(mesh);
+      this.meshById.set(asset.id, mesh);
 
-      // 地面标记：小圆环，便于在远处找到结构物
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(58, 74, 28),
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color(TYPE_COLOR[asset.type] || '#ffffff'),
-          transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false,
-        }),
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(asset.x, baseY + 3, asset.z);
-      ring.userData.assetId = asset.id;
-      this.group.add(ring);
-      ring.name = asset.id + ':ring';
+      // 地面标记环：几何合并到一个带顶点色的网格
+      const ringGeo = new THREE.RingGeometry(58, 74, 28);
+      ringGeo.rotateX(-Math.PI / 2);
+      ringGeo.translate(asset.x, baseY + 3, asset.z);
+      const c = new THREE.Color(TYPE_COLOR[asset.type] || '#ffffff');
+      const cnt = ringGeo.attributes.position.count;
+      const col = new Float32Array(cnt * 3);
+      for (let i = 0; i < cnt; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      ringGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      markerGeoms.push(ringGeo);
+      markerColors.push(c);
     }
+    // 合并所有标记环为 1 个网格
+    if (markerGeoms.length) {
+      const total = markerGeoms.reduce((s, g) => s + g.attributes.position.count, 0);
+      const pos = new Float32Array(total * 3);
+      const col = new Float32Array(total * 3);
+      const idx = [];
+      let vo = 0;
+      for (const g of markerGeoms) {
+        const p = g.attributes.position.array;
+        pos.set(p, vo * 3);
+        const c = g.attributes.color.array;
+        col.set(c, vo * 3);
+        const ix = g.index;
+        if (ix) for (let i = 0; i < ix.count; i++) idx.push(ix.getX(i) + vo);
+        vo += g.attributes.position.count;
+        g.dispose();
+      }
+      const merged = new THREE.BufferGeometry();
+      merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      merged.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      merged.setIndex(idx);
+      merged.computeBoundingSphere();
+      const markers = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+      markers.name = 'asset-markers';
+      this.group.add(markers);
+    }
+    // 结构物整体作为点选目标（合并后每个结构物一个网格）
+    this.pickTargets = [...this.meshById.values()];
     // 选中高亮环
     this.highlight = new THREE.Mesh(
       new THREE.RingGeometry(88, 104, 40),

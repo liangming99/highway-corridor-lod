@@ -2,7 +2,7 @@
 // 两种渲染路径：mode='mesh' 逐瓦片网格（对照用）；mode='batch' 每层一个合批网格 + 分级图集
 import * as THREE from 'three';
 import { tileIndex, tileMeters, tileMetersAt, tileBoundsMeters, metersToLonLat } from './geo.js';
-import { SharedAtlas } from './atlas.js';
+import { LevelAtlas } from './atlas.js';
 import { LevelBatch } from './batch.js';
 
 export const LEVELS = [11, 12, 13, 14, 15, 16];
@@ -23,7 +23,7 @@ const DEFAULTS = {
   skirtDepth: 26,
   gridByLevel: { 11: 8, 12: 8, 13: 16, 14: 24, 15: 32, 16: 32 },
   thresholds: { 11: 40000, 12: 40000, 13: 15000, 14: 6200, 15: 2600, 16: 1100 },
-  budgets: { 11: 20, 12: 44, 13: 32, 14: 28, 15: 20, 16: 20 },
+  budgets: { 11: 16, 12: 32, 13: 26, 14: 22, 15: 16, 16: 16 },
 };
 
 const key = (z, x, y) => z + '/' + x + '/' + y;
@@ -49,12 +49,14 @@ export class TileManager {
     this.inflight = new Map();
     this.ready = [];
     this.byLevel = new Map(LEVELS.map((z) => [z, []]));
+    this.atlases = new Map();
     this.atlas = null;
     this.batches = new Map();
     this.stats = {
       built: 0, evictions: 0, staleDrops: 0, demFail: 0, imgFail: 0,
       demBytes: 0, imgBytes: 0, demTiles: 0, lastSelectMs: 0, lastPumpMs: 0,
       atlasWrites: 0, atlasFallback: 0,
+      readyDrops: 0,
     };
     this.frame = 0;
     this.skirtMaterial = new THREE.MeshBasicMaterial({ color: 0x23282a });
@@ -80,30 +82,31 @@ export class TileManager {
     for (const k of [...this.resident.keys()]) this._dispose(k, true);
     for (const b of this.batches.values()) b.dispose(this.scene);
     if (this.atlas) this.atlas.dispose();
+    for (const a of this.atlases.values()) a.dispose();
+    this.atlases.clear();
     this.atlas = null;
     this.batches.clear();
     if (this.group) this.group.clear();
     if (this.skirtGroup) this.skirtGroup.clear();
 
     if (this.opts.mode === 'batch') {
-      // 一张共享图集承载所有层级的影像；容量必须覆盖各层预算之和
-      const totalSlots = LEVELS.reduce((s, z) => s + this.opts.budgets[z], 0);
-      const cols = Math.ceil(Math.sqrt(totalSlots));
-      this.atlas = new SharedAtlas({ renderer: this.renderer, cols });
+      // 每层一张小图集：单张越小，整张上传的长任务越短
       for (const z of LEVELS) {
         const cap = this.opts.budgets[z];
         const grid = this.opts.gridByLevel[z];
         const vertsPerTile = (grid + 1) ** 2 + 4 * (grid + 1) * 2;
         const indexPerTile = grid * grid * 6 + 4 * grid * 6;
+        const atlas = new LevelAtlas({ renderer: this.renderer, slots: cap, tier: z });
         const batch = new LevelBatch({
           scene: this.scene,
           capacity: cap,
           vertsPerTile,
           indexPerTile,
-          atlas: this.atlas,
-          material: new THREE.MeshLambertMaterial({ map: this.atlas.texture }),
+          atlas,
+          material: new THREE.MeshLambertMaterial({ map: atlas.texture }),
           tier: z,
         });
+        this.atlases.set(z, atlas);
         this.batches.set(z, batch);
       }
     }
@@ -223,6 +226,10 @@ export class TileManager {
 
   _pump() {
     const t0 = performance.now();
+    // 页面不可见时不派发：rAF 停摆时继续拉取只会堆内存
+    if (typeof document !== 'undefined' && document.hidden) return;
+    // 积压过多时暂停派发，等主线程追上来
+    if (this.ready.length >= (this.readyCap || 12)) return;
     const queued = new Set(this.queue.map((q) => q.key));
     for (const [k, d] of this.desired) {
       if (this.resident.has(k) || this.inflight.has(k) || queued.has(k)) continue;
@@ -245,11 +252,12 @@ export class TileManager {
         const cand = this.queue[0];
         if (this.opts.mode === 'batch') {
           const batch = this.batches.get(cand.z);
+          const atlas = this.atlases.get(cand.z);
           const b = batch ? batch.acquire() : -1;
-          const a = b >= 0 && this.atlas ? this.atlas.acquire(cand.key) : -1;
+          const a = b >= 0 && atlas ? atlas.acquire(cand.key) : -1;
           if (a < 0 || b < 0) {
             // 该层或图集暂时没有空槽：释放已占的，换下一个候选
-            if (a >= 0) this.atlas.release(a);
+            if (a >= 0) atlas.release(a);
             if (b >= 0) batch.release(b);
             this.queue.shift();
             this.queue.push(cand);
@@ -257,7 +265,7 @@ export class TileManager {
           }
           atlasSlot = a;
           batchSlot = b;
-          jobSlot = this.atlas.uvRect(a);
+          jobSlot = atlas.uvRect(a);
           this.stats.slotsAcquired = (this.stats.slotsAcquired || 0) + 1;
         }
         job = this.queue.shift();
@@ -305,6 +313,14 @@ export class TileManager {
     this.stats.demTiles = (this.stats.demTiles || 0) + (res.demTiles || 0);
     if (!this.desired.has(res.id)) {
       this.stats.staleDrops++;
+      res.bitmap?.close?.();
+      this._releaseSlots(job);
+      return;
+    }
+    // 背压：主线程来不及消费时直接丢弃并回收位图，避免位图与队列无上限堆积
+    if (this.ready.length >= (this.readyCap || 12)) {
+      this.stats.readyDrops = (this.stats.readyDrops || 0) + 1;
+      res.bitmap?.close?.();
       this._releaseSlots(job);
       return;
     }
@@ -319,8 +335,9 @@ export class TileManager {
   }
 
   _releaseSlots(job) {
-    if (job.atlasSlot >= 0 && this.atlas) {
-      this.atlas.release(job.atlasSlot);
+    const atlas = this.atlases.get(job.z);
+    if (job.atlasSlot >= 0 && atlas) {
+      atlas.release(job.atlasSlot);
       this.stats.slotsReleased = (this.stats.slotsReleased || 0) + 1;
     }
     if (job.batchSlot >= 0) {
@@ -423,7 +440,7 @@ export class TileManager {
   /** 合批路径：写进该层缓冲并更新图集 */
   writeBatch(res) {
     const batch = this.batches.get(res.z);
-    const atlas = this.atlas;
+    const atlas = this.atlases.get(res.z);
     if (!batch || !atlas) return null;
     const ok = batch.write(res.batchSlot, {
       pos: res.pos, uv: res.uv, nrm: res.nrm, idx: res.idx,
@@ -470,6 +487,7 @@ export class TileManager {
       }
       const rec = this.opts.mode === 'batch' ? this.writeBatch(res) : this.buildMesh(res);
       if (!rec || rec.ok === false) {
+        res.bitmap?.close?.();
         this._releaseSlots({ z: res.z, atlasSlot: res.atlasSlot, batchSlot: res.batchSlot });
         continue;
       }
@@ -481,7 +499,21 @@ export class TileManager {
     }
     if (this.opts.mode === 'batch') {
       for (const b of this.batches.values()) if (b.dirty) b.flush();
-      if (this.atlas) this.atlas.flush(performance.now());
+      // 每帧最多上传一张图集：把整张纹理上传的成本摊到多帧
+      const now = performance.now();
+      let uploaded = false;
+      for (const z of LEVELS) {
+        const a = this.atlases.get(z);
+        if (!a) continue;
+        const tU = performance.now();
+        if (a.flush(now)) {
+          const cost = performance.now() - tU;
+          if (cost > (this.maxUploadMs || 0)) this.maxUploadMs = cost;
+          const per = this.uploadMsByLevel || (this.uploadMsByLevel = {});
+          per[z] = +((per[z] || 0) + cost).toFixed(1);
+          uploaded = true; break;
+        }
+      }
     }
     this.evictIfNeeded(cam);
   }
@@ -499,7 +531,32 @@ export class TileManager {
         this.stats.staleEvicted = (this.stats.staleEvicted || 0) + 1;
       }
     }
-    if (this.opts.mode === 'batch') return; // 合批路径由槽位容量天然限流
+    // 槽位压力：图集槽位耗尽且仍有瓦片待加载时，立即淘汰离相机最远的常驻瓦片
+    if (this.opts.mode === 'batch') {
+      let guard = 0;
+      // 常驻下限：低于这个数量时不再按槽位压力淘汰，宁可暂时缺细节也别让画面空掉
+      const minResident = Math.max(12, Math.round(this.opts.totalTileCap * 0.12));
+      while (guard++ < 8) {
+        const freeSlots = [...this.atlases.values()].reduce((s, a) => s + a.free.length, 0);
+        if (freeSlots > 0) break;
+        if (!this.queue.length) break;
+        if (this.resident.size <= minResident) break;
+        // 先淘汰不需要的；都还需要时，退而淘汰离相机最远的常驻瓦片
+        let staleKey = null, staleDist = -Infinity;
+        let anyKey = null, anyDist = -Infinity;
+        for (const [k, r] of this.resident) {
+          const d = Math.hypot(r.cx - cam.x, r.cz - cam.z);
+          if (!this.desired.has(k) && d > staleDist) { staleDist = d; staleKey = k; }
+          if (d > anyDist) { anyDist = d; anyKey = k; }
+        }
+        const worstKey = staleKey || anyKey;
+        if (!worstKey) break;
+        this._dispose(worstKey);
+        this.stats.evictions++;
+        this.stats.slotPressureEvicted = (this.stats.slotPressureEvicted || 0) + 1;
+      }
+      return;
+    }
     const perLevel = {};
     for (const r of this.resident.values()) perLevel[r.z] = (perLevel[r.z] || 0) + 1;
     for (const z of Object.keys(this.opts.budgets)) {
@@ -537,7 +594,9 @@ export class TileManager {
     if (r.batched) {
       const b = this.batches.get(r.z);
       b && r.batchSlot >= 0 && b.release(r.batchSlot);
-      this.atlas && r.atlasSlot >= 0 && this.atlas.release(r.atlasSlot);
+      const a = this.atlases.get(r.z);
+      a && r.atlasSlot >= 0 && a.release(r.atlasSlot);
+      this.stats.slotsReleased = (this.stats.slotsReleased || 0) + 1;
     } else {
       if (r.mesh) {
         this.group.remove(r.mesh);
@@ -602,7 +661,7 @@ export class TileManager {
     if (this.opts.mode === 'batch') {
       tex = 0;
       geo = 0;
-      if (this.atlas) tex += this.atlas.width * this.atlas.height * 4 * 1.34;
+      for (const a of this.atlases.values()) tex += a.width * a.height * 4 * 1.34;
       for (const b of this.batches.values()) {
         geo += b.position.byteLength + b.uv.byteLength + b.normal.byteLength + b.index.byteLength;
       }
@@ -621,12 +680,20 @@ export class TileManager {
       evictions: this.stats.evictions,
       staleDrops: this.stats.staleDrops,
       staleEvicted: this.stats.staleEvicted || 0,
+      readyDrops: this.stats.readyDrops || 0,
+      slotPressureEvicted: this.stats.slotPressureEvicted || 0,
+      ready: this.ready.length,
       demFail: this.stats.demFail,
       imgFail: this.stats.imgFail,
       demMB: this.stats.demBytes / 1024 / 1024,
       imgMB: this.stats.imgBytes / 1024 / 1024,
       demTiles: this.stats.demTiles || 0,
       atlasWrites: this.stats.atlasWrites || 0,
+      atlasUploads: [...this.atlases.values()].reduce((s, a) => s + a.uploadCount, 0),
+      maxUploadMs: +(this.maxUploadMs || 0).toFixed(1),
+      atlasFreePerLevel: Object.fromEntries([...this.atlases.entries()].map(([z, a]) => [z, a.free.length])),
+      uploadMsByLevel: this.uploadMsByLevel || {},
+      atlasSize: Object.fromEntries([...this.atlases.entries()].map(([z, a]) => [z, a.width])),
       atlasFallback: this.stats.atlasFallback || 0,
       slotsAcquired: this.stats.slotsAcquired || 0,
       slotsReleased: this.stats.slotsReleased || 0,
