@@ -1,10 +1,13 @@
 // main.js — 场景、相机、界面绑定与渲染循环
 import * as THREE from 'three';
+import { OrbitControls } from '../vendor/OrbitControls.js';
 import { COPY } from './copy.js';
 import { buildCorridor } from './geo.js';
 import { TileManager } from './tilemanager.js';
 import { Hud, Bench } from './hud.js';
 import { AssetPanel } from './assetpanel.js';
+import { BridgePanel } from './bridgepanel.js';
+import { buildRiver } from './river.js';
 import { frameStats } from './hud.js';
 
 window.addEventListener('error', (e) => {
@@ -124,11 +127,31 @@ function initScene(canvas) {
   state.renderer = renderer;
   state.scene = scene;
   state.camera = camera;
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.rotateSpeed = 0.55;
+  controls.zoomSpeed = 1.1;
+  controls.panSpeed = 0.8;
+  controls.minDistance = 90;
+  controls.maxDistance = 9000;
+  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.enabled = false;
+  state.controls = controls;
 }
 
 function updateCamera(dt) {
   const c = state.corridor;
   const camera = state.camera;
+  // 桥梁构件模式：相机由轨道控制驱动，不跟走廊里程
+  if (state.bridgeMode) {
+    if (state.controls) {
+      // 构件选中后把轨道中心移到该构件
+      if (state.bridgeFocus) state.controls.target.copy(state.bridgeFocus);
+      state.controls.update();
+    }
+    return;
+  }
   if (state.mode === 'follow') {
     if (state.playing || state.bench.running) {
       const jump = BENCH_MODES.C;
@@ -288,6 +311,10 @@ function bindUI() {
   window.addEventListener('keydown', (e) => {
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
     state.keys.add(e.key.toLowerCase());
+    if (e.key.toLowerCase() === 'b') {
+      if (state.bridgeMode) exitBridge(); else enterBridge();
+    }
+    if (e.key === 'Escape' && state.bridgeMode) exitBridge();
   });
   window.addEventListener('keyup', (e) => state.keys.delete(e.key.toLowerCase()));
   window.addEventListener('resize', resize);
@@ -302,6 +329,67 @@ function startBench(key) {
   state.bench.start(mode, benchCtx());
   document.getElementById('benchCard').hidden = true;
   toast(COPY.toast.benchRunning);
+}
+
+
+/** 进入桥梁构件模式：隐藏地形瓦片，把相机对到桥 */
+function enterBridge() {
+  const bp = state.bridgePanel;
+  if (!bp) { toast(COPY.bridge.title + ' 模型未加载'); return; }
+  state.bridgeMode = true;
+  bp.setVisible(true);
+  if (state.controls) state.controls.enabled = true;
+  document.getElementById('assetPanel').hidden = true;
+  state.tiles.group.visible = false;
+  state.tiles.skirtGroup.visible = false;
+  if (state.assetPanel) state.assetPanel.group.visible = false;
+  if (state.bridgeRiver) state.bridgeRiver.group.visible = true;
+  state.playing = false;
+  const anchor = state.bridgeAnchor.clone();
+  const cam = state.camera;
+  // 按模型包围盒自动取景：832 m 长的桥需要约 1.6 km 视距才能整幅入画
+  const box = new THREE.Box3();
+  if (state.bridgePanel && state.bridgePanel.model) {
+    box.setFromObject(state.bridgePanel.model.group);
+  }
+  const size = box.isEmpty() ? new THREE.Vector3(800, 150, 60) : box.getSize(new THREE.Vector3());
+  const center = box.isEmpty() ? anchor.clone() : box.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.x, size.y, size.z) * 0.62;
+  const fov = (cam.fov * Math.PI) / 180;
+  // 视距按最长边装框，再留 25% 余量
+  const distance = (radius / Math.tan(fov / 2)) * 0.95;
+  // 侧前方 25° 俯视：能同时看到桥面、两座塔与索面
+  const dir = new THREE.Vector3(0.30, 0.26, 0.92).normalize();
+  if (state.controls) {
+    state.controls.target.copy(center);
+    state.controls.enabled = true;
+  }
+  cam.position.copy(center.clone().addScaledVector(dir, distance));
+  cam.lookAt(center);
+  cam.far = Math.max(cam.far, distance * 4);
+  cam.updateProjectionMatrix();
+  if (state.controls) state.controls.update();
+  document.getElementById('minimapWrap').hidden = true;
+  document.querySelector('.panel').hidden = true;
+  document.querySelector('.hud').hidden = true;
+  toast(COPY.bridge.title + ' · 构件模式');
+}
+
+/** 退出桥梁模式，回到走廊漫游 */
+function exitBridge() {
+  if (!state.bridgeMode) return;
+  state.bridgeMode = false;
+  state.bridgePanel.setVisible(false);
+  if (state.controls) state.controls.enabled = false;
+  document.getElementById('minimapWrap').hidden = false;
+  document.querySelector('.panel').hidden = false;
+  document.querySelector('.hud').hidden = false;
+  document.getElementById('assetPanel').hidden = false;
+  state.tiles.group.visible = true;
+  state.tiles.skirtGroup.visible = !!state.options.skirt;
+  if (state.assetPanel) state.assetPanel.group.visible = true;
+  if (state.bridgeRiver) state.bridgeRiver.group.visible = false;
+  toast(COPY.bridge.title + ' · 已退出');
 }
 
 function benchCtx() {
@@ -428,6 +516,37 @@ async function boot() {
     },
   });
   state.assetPanel.onToast = toast;
+  // 桥梁构件模式：加载 Blender 导出的 GLB
+  const bridgeAsset = state.assetPanel.assets.find((a) => a.type === 'bridge' && a.span >= 400);
+  if (bridgeAsset) {
+    const bp = new BridgePanel({
+      scene: state.scene,
+      camera: state.camera,
+      canvas: state.renderer.domElement,
+      renderer: state.renderer,
+      state,
+      onChanged: (ev) => {
+        if (ev.toast) toast(ev.toast);
+        if (ev.focus) state.bridgeFocus = ev.focus;
+      },
+    });
+    const ground = state.tiles.groundHeightAt(bridgeAsset.x, bridgeAsset.z);
+    const baseY = ground != null ? ground : bridgeAsset.ele;
+    const ok = await bp.init({
+      position: new THREE.Vector3(bridgeAsset.x, baseY, bridgeAsset.z),
+      bearingDeg: (bridgeAsset.bearing * 180) / Math.PI,
+    });
+    if (ok) {
+      state.bridgePanel = bp;
+      state.bridgeAnchor = new THREE.Vector3(bridgeAsset.x, baseY + 60, bridgeAsset.z);
+      const river = buildRiver(state.bridgeAnchor, (bridgeAsset.bearing * 180) / Math.PI);
+      river.group.visible = false;
+      state.scene.add(river.group);
+      state.bridgeRiver = river;
+      document.getElementById('bridgeExit').addEventListener('click', () => exitBridge());
+      document.getElementById('bridgeOpenBtn').addEventListener('click', () => enterBridge());
+    }
+  }
 
   let last = performance.now();
   let lastEdges = 0;
@@ -459,7 +578,7 @@ async function boot() {
     const dt = dtMs / 1000;
     const t0 = performance.now();
     updateCamera(dt);
-    if (!document.hidden) {
+    if (!document.hidden && !state.bridgeMode) {
       state.tiles.update({ x: state.camera.position.x, z: state.camera.position.z, dist: state.dist });
     }
     const t1 = performance.now();
@@ -499,6 +618,26 @@ async function boot() {
   };
   requestAnimationFrame(loop);
   window.dispatchEvent(new Event('lod:ready'));
+  // 环境反射延后生成：首帧后渲染器状态才完整
+  setTimeout(() => {
+    try {
+      const pmrem = new THREE.PMREMGenerator(state.renderer);
+      const envScene = new THREE.Scene();
+      const skyGeo = new THREE.SphereGeometry(5000, 32, 16);
+      const colors = [];
+      const pos = skyGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const t = Math.max(0, Math.min(1, pos.getY(i) / 5000 * 0.5 + 0.5));
+        colors.push(0.30 + 0.44 * t, 0.44 + 0.36 * t, 0.58 + 0.26 * t);
+      }
+      skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      envScene.add(new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+      state.envMap = pmrem.fromScene(envScene, 0.05).texture;
+      state.scene.environment = state.envMap;
+    } catch (e) {
+      (window.__errs = window.__errs || []).push('envmap: ' + String(e && e.message));
+    }
+  }, 600);
 }
 
 boot();
